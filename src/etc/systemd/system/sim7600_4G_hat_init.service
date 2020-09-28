@@ -1,0 +1,7 @@
+[Unit]
+Description=Waveshare SIM7600 4G Hat initialization script
+Wants=sim7600_4G_hat_init.timer
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/sim7600_4G_hat_init

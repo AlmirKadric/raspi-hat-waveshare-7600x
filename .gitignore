@@ -1,0 +1,8 @@
+# Build files
+/package/
+
+# IDE
+/.idea/
+
+# OS Files
+.DS_Store

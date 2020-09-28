@@ -1,0 +1,97 @@
+#!/bin/bash
+
+set -o nounset
+set -o errexit
+
+##
+# Check if the serial port is currently in-use
+# If so, its highly likely connected and we dont need to initialize
+##
+if (lsof /dev/ttyS0 >/dev/null 2>&1); then
+	echo "sim7600_4G_hat_init: in-use"
+	exit 0;
+fi
+
+
+##
+# This will cycle the onboard power similar to pressing the PWRKEY
+##
+
+# Enable GPIO pins 4 and 6 for usage
+if [ ! -e /sys/class/gpio/gpio4 ]; then
+	echo "4" > /sys/class/gpio/export
+fi
+if [ ! -e /sys/class/gpio/gpio6 ]; then
+	echo "6" > /sys/class/gpio/export
+fi
+
+# Set GPIO pins 4 & 6 as outputs
+echo "out" > /sys/class/gpio/gpio4/direction
+echo "out" > /sys/class/gpio/gpio6/direction
+
+# Set GPIO pins 4 & 6 to low
+echo "0" > /sys/class/gpio/gpio4/value
+echo "0" > /sys/class/gpio/gpio6/value
+sleep 0.1
+
+# Set GPIO pins 4 & 6 to high
+echo "1" > /sys/class/gpio/gpio4/value
+echo "1" > /sys/class/gpio/gpio6/value
+sleep 0.1
+
+# Set GPIO pins 4 & 6 to low again
+echo "0" > /sys/class/gpio/gpio4/value
+echo "0" > /sys/class/gpio/gpio6/value
+sleep 0.1
+
+echo "sim7600_4G_hat_init: PWRKEY"
+
+
+##
+# Test module to be ready for use
+##
+
+# Configure serial port
+stty -F /dev/ttyS0 115200 raw
+
+# Bind serial port against bi-directional file descriptor
+exec 99<>/dev/ttyS0
+
+# Wait for module to respond with correct results
+for i in {1..60}; do
+	# Flush any data in the buffer
+	read -t1 -n999 RESP <&99 || true;
+
+	# Send AT command to check ready status
+	# TODO: check connect ready state instead
+	printf 'AT\r' >&99;
+
+	# Expect echo response
+	read -t1 RESP <&99 || true;
+	if ! [[ "${RESP}" =~ AT ]]; then
+		echo "waiting AT: ${RESP}";
+		sleep 1;
+		continue;
+	fi
+
+	# Expect OK response
+	read -t1 RESP <&99 || true;
+	if ! [[ "${RESP}" =~ OK ]]; then
+		echo "waiting OK: ${RESP}";
+		sleep 1;
+		continue;
+	fi
+
+	# If we got here, everything was good so we success
+	echo "sim7600_4G_hat_init: initialized"
+	# Unbind file descriptor
+	exec 99>&-
+	# Exit success
+	exit 0;
+done
+
+# If we got here, startup timed-out, so we fail
+# Unbind file descriptor
+exec 99>&-
+# Exit failure
+exit 1;
